@@ -519,7 +519,7 @@ export class EnvironmentManager implements IPixiEnvironmentManager {
                 }
             } catch (e: any) {
                 this.log(`Failed to parse shell-hook JSON: ${e}`);
-                throw new Error(`Failed to parse Pixi output: ${e.message}`);
+                throw new Error(`Failed to parse Pixi output: ${e.message}`, { cause: e });
             }
 
             // Apply to VSCode environment

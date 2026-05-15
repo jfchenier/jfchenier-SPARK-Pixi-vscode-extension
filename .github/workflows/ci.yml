@@ -50,4 +50,4 @@ jobs:
         run: npm ci
 
       - name: Verify Package Build
-        run: npx vsce package
+        run: npx @vscode/vsce package

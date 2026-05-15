@@ -3,7 +3,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import * as proxyquire from 'proxyquire';
+import proxyquire = require('proxyquire');
 import { downloadFile } from '../../pixi';
 import * as os from 'os';
 

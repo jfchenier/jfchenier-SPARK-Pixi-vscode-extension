@@ -4,12 +4,25 @@ import * as vscode from 'vscode';
 import { EnvironmentManager as RealEnvironmentManager } from '../../environment'; // Import real type
 const proxyquire = require('proxyquire').noCallThru();
 
+export let dynamicMockFsReadFileSync: any = () => '';
+export let dynamicMockFsPromises: any = {
+    mkdtemp: async () => '',
+    writeFile: async () => {},
+    rm: async () => {}
+};
+
 // Mock dependencies
 const mockFs = {
     existsSync: (path: string) => {
         if (path.includes('.pixi/envs/default')) { return true; }
         if (path.includes('.pixi/envs/pixi')) { return true; } // Mock pixi env existence
         return true; // Default to true for legacy tests unless specific path needed
+    },
+    readFileSync: (...args: any[]) => dynamicMockFsReadFileSync(...args),
+    promises: {
+        mkdtemp: (...args: any[]) => dynamicMockFsPromises.mkdtemp(...args),
+        writeFile: (...args: any[]) => dynamicMockFsPromises.writeFile(...args),
+        rm: (...args: any[]) => dynamicMockFsPromises.rm(...args)
     }
 };
 
@@ -769,16 +782,16 @@ suite('Environment Manager Test Suite', () => {
             return { stdout: '{}', stderr: '' };
         };
 
-        const originalReadFileSync = (mockFs as any).readFileSync;
-        const originalPromises = (mockFs as any).promises;
+        const originalReadFileSync = dynamicMockFsReadFileSync;
+        const originalPromises = dynamicMockFsPromises;
 
-        (mockFs as any).readFileSync = (path: string) => {
+        dynamicMockFsReadFileSync = (path: string) => {
             if (path.endsWith('pixi.lock')) {
                 return 'version: 7';
             }
             return '';
         };
-        (mockFs as any).promises = {
+        dynamicMockFsPromises = {
             mkdtemp: async () => '/mock/tmpdir',
             writeFile: async () => {},
             rm: async () => {}
@@ -805,8 +818,8 @@ suite('Environment Manager Test Suite', () => {
 
         // Restore
         vscode.window.showWarningMessage = originalShowWarning;
-        (mockFs as any).readFileSync = originalReadFileSync;
-        (mockFs as any).promises = originalPromises;
+        dynamicMockFsReadFileSync = originalReadFileSync;
+        dynamicMockFsPromises = originalPromises;
 
         assert.strictEqual(promptShown, true, 'Should warn about outdated pixi');
         assert.strictEqual(updateCalled, false, 'Should not update pixi if canceled');
@@ -834,16 +847,16 @@ suite('Environment Manager Test Suite', () => {
             return { stdout: '{}', stderr: '' };
         };
 
-        const originalReadFileSync = (mockFs as any).readFileSync;
-        const originalPromises = (mockFs as any).promises;
+        const originalReadFileSync = dynamicMockFsReadFileSync;
+        const originalPromises = dynamicMockFsPromises;
 
-        (mockFs as any).readFileSync = (path: string) => {
+        dynamicMockFsReadFileSync = (path: string) => {
             if (path.endsWith('pixi.lock')) {
                 return 'version: 7';
             }
             return '';
         };
-        (mockFs as any).promises = {
+        dynamicMockFsPromises = {
             mkdtemp: async () => '/mock/tmpdir',
             writeFile: async () => {},
             rm: async () => {}
@@ -870,8 +883,8 @@ suite('Environment Manager Test Suite', () => {
 
         // Restore
         vscode.window.showWarningMessage = originalShowWarning;
-        (mockFs as any).readFileSync = originalReadFileSync;
-        (mockFs as any).promises = originalPromises;
+        dynamicMockFsReadFileSync = originalReadFileSync;
+        dynamicMockFsPromises = originalPromises;
 
         assert.strictEqual(promptShown, true, 'Should warn about outdated pixi');
         assert.strictEqual(updateCalled, true, 'Should update pixi');
