@@ -114,6 +114,11 @@
         "command": "pixi.clear",
         "title": "Clear Environment",
         "category": "Pixi Env"
+      },
+      {
+        "command": "pixi.updatePixi",
+        "title": "Update Local Pixi Executable",
+        "category": "Pixi Env"
       }
     ],
     "menus": {
@@ -137,6 +142,10 @@
         {
           "command": "pixi.activate",
           "when": "pixi.hasPixiDirectory"
+        },
+        {
+          "command": "pixi.updatePixi",
+          "when": "pixi.isPixiInstalled && !config.pixi.useSystemPixi"
         }
       ]
     },

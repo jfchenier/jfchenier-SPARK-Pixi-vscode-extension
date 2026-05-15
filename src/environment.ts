@@ -1,4 +1,4 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { PixiManager } from './pixi';
@@ -442,6 +442,21 @@ export class EnvironmentManager implements IPixiEnvironmentManager {
 
         const pixiPath = this._pixiManager.getPixiPath();
 
+        if (pixiPath && await this.isPixiOutdatedForLockfile(workspaceUri, pixiPath)) {
+            const selection = await vscode.window.showWarningMessage(
+                `Your Pixi installation is outdated and will downgrade the pixi.lock file format if you activate this environment. Please update Pixi.`,
+                "Update Pixi", "Cancel Activation"
+            );
+            if (selection === "Update Pixi") {
+                const success = await this._pixiManager.updatePixi(pixiPath);
+                if (!success) {
+                    return; // Stop if update failed
+                }
+            } else {
+                return; // Stop activation if user cancels
+            }
+        }
+
         if (!silent) {
             const config = vscode.workspace.getConfiguration('pixi');
             const autoReload = config.get<boolean>('autoReload');
@@ -722,13 +737,13 @@ export class EnvironmentManager implements IPixiEnvironmentManager {
     public async checkAndPromptForUpdate(silent: boolean = false, changedFile?: string): Promise<boolean> {
         if (this.isChecking) { return false; } // Prevent re-entry
 
+        const workspaceUri = this.getWorkspaceFolderURI();
+        if (!workspaceUri) { return false; }
+
         const config = vscode.workspace.getConfiguration('pixi');
         if (config.get<boolean>('disableConfigChangePrompt')) {
             return false;
         }
-
-        const workspaceUri = this.getWorkspaceFolderURI();
-        if (!workspaceUri) { return false; }
 
         // Check if an environment is currently active/selected. If not, don't nag about updates.
         const currentEnvName = this.getCurrentEnvName();
@@ -790,6 +805,63 @@ export class EnvironmentManager implements IPixiEnvironmentManager {
         } finally {
             this.isChecking = false;
         }
+    }
+
+    private async getMaxSupportedLockVersion(pixiPath: string): Promise<number | undefined> {
+        try {
+            const os = require('os');
+            const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'pixi-lock-check-'));
+            const tomlPath = path.join(tmpDir, 'pixi.toml');
+            const lockPath = path.join(tmpDir, 'pixi.lock');
+
+            await fs.promises.writeFile(tomlPath, '[workspace]\nname = "dummy"\nchannels = []\nplatforms = ["linux-64"]\n');
+            await fs.promises.writeFile(lockPath, 'version: 9999\n');
+
+            let output = '';
+            try {
+                const { stdout, stderr } = await this._exec(`"${pixiPath}" lock --check`, { cwd: tmpDir });
+                output = stdout + stderr;
+            } catch (e: any) {
+                output = (e.stdout || '') + (e.stderr || '');
+            }
+
+            // Cleanup
+            await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => { });
+
+            const match = output.match(/Maximum supported version:\s*(\d+)/i);
+            if (match && match[1]) {
+                return parseInt(match[1], 10);
+            }
+        } catch (e) {
+            this.log(`Error determining max supported lock version: ${e}`);
+        }
+        return undefined;
+    }
+
+    private async isPixiOutdatedForLockfile(workspaceUri: vscode.Uri, pixiPath: string): Promise<boolean> {
+        try {
+            let lockVersion: number | undefined;
+            const lockPath = path.join(workspaceUri.fsPath, 'pixi.lock');
+            if (fs.existsSync(lockPath)) {
+                const content = fs.readFileSync(lockPath, 'utf8');
+                const match = content.match(/^version:\s*(\d+)/m);
+                if (match && match[1]) {
+                    lockVersion = parseInt(match[1], 10);
+                }
+            }
+
+            if (!lockVersion) {
+                return false;
+            }
+
+            const maxSupportedVersion = await this.getMaxSupportedLockVersion(pixiPath);
+            if (maxSupportedVersion !== undefined && lockVersion > maxSupportedVersion) {
+                return true;
+            }
+        } catch (e) {
+            this.log(`Error checking pixi version for lockfile: ${e}`);
+        }
+        return false;
     }
 
     private getSafeShellExecutionOptions(cwd: string): vscode.ShellExecutionOptions {

@@ -37,6 +37,21 @@ export async function activate(context: vscode.ExtensionContext) {
         await envManager.generateScripts();
     });
 
+    const updatePixiDisposable = vscode.commands.registerCommand('pixi.updatePixi', async () => {
+        const config = vscode.workspace.getConfiguration('pixi');
+        if (config.get<boolean>('useSystemPixi')) {
+            vscode.window.showInformationMessage("Extension is using the System Pixi executable. Please update it via your system's package manager.");
+            return;
+        }
+
+        const pixiPath = pixiManager.getPixiPath();
+        if (pixiPath) {
+            await pixiManager.updatePixi(pixiPath);
+        } else {
+            vscode.window.showErrorMessage("Pixi executable not found.");
+        }
+    });
+
 
 
     context.subscriptions.push(createEnvDisposable);
@@ -46,6 +61,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(clearDisposable);
     context.subscriptions.push(generateOfflineDisposable);
     context.subscriptions.push(generateScriptsDisposable);
+    context.subscriptions.push(updatePixiDisposable);
 
     // Check for system pixi
     pixiManager.checkAndPromptSystemPixi(context);

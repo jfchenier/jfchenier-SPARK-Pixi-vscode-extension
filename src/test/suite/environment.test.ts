@@ -750,4 +750,131 @@ suite('Environment Manager Test Suite', () => {
         assert.strictEqual(quickPickCalled, false, 'Should NOT call showQuickPick for single environment');
         assert.strictEqual(activatedEnv, 'only_env', 'Should activate the only available environment');
     });
+
+    test('activate stops if pixi is outdated and user cancels', async () => {
+        let promptShown = false;
+        let updateCalled = false;
+        let installCalled = false;
+
+        const originalShowWarning = vscode.window.showWarningMessage;
+        (vscode.window as any).showWarningMessage = async (msg: string, ...items: string[]) => {
+            promptShown = true;
+            return 'Cancel Activation';
+        };
+
+        const mockExec = async (cmd: string) => {
+            if (cmd.includes('lock --check')) {
+                return { stdout: 'Maximum supported version: 6 (pixi v0.67.2)', stderr: '' };
+            }
+            return { stdout: '{}', stderr: '' };
+        };
+
+        const originalReadFileSync = (mockFs as any).readFileSync;
+        const originalPromises = (mockFs as any).promises;
+
+        (mockFs as any).readFileSync = (path: string) => {
+            if (path.endsWith('pixi.lock')) {
+                return 'version: 7';
+            }
+            return '';
+        };
+        (mockFs as any).promises = {
+            mkdtemp: async () => '/mock/tmpdir',
+            writeFile: async () => {},
+            rm: async () => {}
+        };
+
+        const mockPixi = new MockPixiManager();
+        mockPixi.updatePixi = async () => { updateCalled = true; return true; };
+
+        const mockContext: any = {
+            environmentVariableCollection: { replace: () => { }, clear: () => { } },
+            workspaceState: { get: () => undefined, update: () => Promise.resolve() },
+            subscriptions: []
+        };
+
+        class TestEnvMgr extends MockedEnvironmentManager {
+            public override getWorkspaceFolderURI() { return vscode.Uri.file('/mock/ws'); }
+            public override async runInstallInTerminal() { installCalled = true; return Promise.resolve(); }
+        }
+
+        const envMgr = new TestEnvMgr(mockPixi, mockContext, undefined);
+        (envMgr as any)._exec = mockExec;
+
+        await envMgr.activate(false, 'default');
+
+        // Restore
+        vscode.window.showWarningMessage = originalShowWarning;
+        (mockFs as any).readFileSync = originalReadFileSync;
+        (mockFs as any).promises = originalPromises;
+
+        assert.strictEqual(promptShown, true, 'Should warn about outdated pixi');
+        assert.strictEqual(updateCalled, false, 'Should not update pixi if canceled');
+        assert.strictEqual(installCalled, false, 'Should halt activation');
+    });
+
+    test('activate updates pixi and proceeds if pixi is outdated and user accepts', async () => {
+        let promptShown = false;
+        let updateCalled = false;
+        let installCalled = false;
+
+        const originalShowWarning = vscode.window.showWarningMessage;
+        (vscode.window as any).showWarningMessage = async (msg: string, ...items: string[]) => {
+            promptShown = true;
+            return 'Update Pixi';
+        };
+
+        const mockExec = async (cmd: string) => {
+            if (cmd.includes('lock --check')) {
+                return { stdout: 'Maximum supported version: 6 (pixi v0.67.2)', stderr: '' };
+            }
+            if (cmd.includes('info --json')) {
+                return { stdout: JSON.stringify({ environments_info: [{ name: 'default' }] }), stderr: '' };
+            }
+            return { stdout: '{}', stderr: '' };
+        };
+
+        const originalReadFileSync = (mockFs as any).readFileSync;
+        const originalPromises = (mockFs as any).promises;
+
+        (mockFs as any).readFileSync = (path: string) => {
+            if (path.endsWith('pixi.lock')) {
+                return 'version: 7';
+            }
+            return '';
+        };
+        (mockFs as any).promises = {
+            mkdtemp: async () => '/mock/tmpdir',
+            writeFile: async () => {},
+            rm: async () => {}
+        };
+
+        const mockPixi = new MockPixiManager();
+        mockPixi.updatePixi = async () => { updateCalled = true; return true; };
+
+        const mockContext: any = {
+            environmentVariableCollection: { replace: () => { }, clear: () => { } },
+            workspaceState: { get: () => undefined, update: () => Promise.resolve() },
+            subscriptions: []
+        };
+
+        class TestEnvMgr extends MockedEnvironmentManager {
+            public override getWorkspaceFolderURI() { return vscode.Uri.file('/mock/ws'); }
+            public override async runInstallInTerminal() { installCalled = true; return Promise.resolve(); }
+        }
+
+        const envMgr = new TestEnvMgr(mockPixi, mockContext, undefined);
+        (envMgr as any)._exec = mockExec;
+
+        await envMgr.activate(false, 'default');
+
+        // Restore
+        vscode.window.showWarningMessage = originalShowWarning;
+        (mockFs as any).readFileSync = originalReadFileSync;
+        (mockFs as any).promises = originalPromises;
+
+        assert.strictEqual(promptShown, true, 'Should warn about outdated pixi');
+        assert.strictEqual(updateCalled, true, 'Should update pixi');
+        assert.strictEqual(installCalled, true, 'Should proceed with activation');
+    });
 });

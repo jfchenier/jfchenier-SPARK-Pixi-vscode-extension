@@ -326,8 +326,8 @@ export class PixiManager {
         }
     }
 
-    private async updatePixi(pixiPath: string): Promise<void> {
-        await vscode.window.withProgress({
+    public async updatePixi(pixiPath: string): Promise<boolean> {
+        return await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "Updating Pixi...",
             cancellable: false
@@ -335,8 +335,10 @@ export class PixiManager {
             try {
                 await execAsync(`"${pixiPath}" self-update`);
                 vscode.window.showInformationMessage("Pixi updated successfully.");
+                return true;
             } catch (e: any) {
                 vscode.window.showErrorMessage(`Failed to update Pixi: ${e.message}`);
+                return false;
             }
         });
     }
